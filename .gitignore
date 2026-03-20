@@ -1,2 +1,70 @@
+# Datasets (quá lớn)
 Datasets/
+
+# Model files (quá lớn)
+PlantAI/models/plant_disease_model.h5
+PlantAI/models/class_names.json
+*.h5
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyc
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+training_log.txt
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Byte-compiled / optimized / DLL files
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Documentation
+docs/_build/
+
+# README
 README.md
