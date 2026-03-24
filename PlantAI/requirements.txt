@@ -1,0 +1,23 @@
+# Core AI dependencies
+fastapi==0.103.1
+uvicorn==0.23.2
+python-multipart==0.0.6
+pillow==12.1.1
+numpy==1.26.0
+tensorflow
+keras==3.12.1
+h5py==3.14.0
+
+# Data science (optional, for training)
+scikit-learn==1.3.2
+matplotlib==3.10.8
+seaborn==0.13.2
+pandas==2.1.1
+
+# Google protobuf (bắt buộc cho TensorFlow >=2.21.0)
+
+# Starlette (FastAPI dependency)
+starlette==0.27.0
+
+# Others (optional, for extended features)
+requests==2.32.5

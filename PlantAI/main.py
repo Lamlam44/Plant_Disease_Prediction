@@ -40,7 +40,7 @@ def warmup_model():
     # Run warmup prediction (để TensorFlow optimize graph)
     try:
         result = predict_disease(dummy_bytes.getvalue())
-        print("[WARMUP] ✅ Model ready! Lần đầu sẽ nhanh hơn.")
+        print("[WARMUP] ✅ Model ready!")
         _warmed_up = True
     except Exception as e:
         print(f"[WARMUP] ⚠️ Warmup failed: {e}")
