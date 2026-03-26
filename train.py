@@ -6,6 +6,7 @@ import gc
 
 # ============================================================
 # Plant Disease Prediction Model - Training Script
+# Transfer Learning (MobileNetV2) + Fine-tuning
 # Optimized for 16GB RAM systems
 # ============================================================
 
@@ -16,34 +17,37 @@ print("=" * 70)
 # ============================================================
 # 1. MEMORY OPTIMIZATION FOR 16GB RAM
 # ============================================================
-# Limit GPU memory growth if available
 gpus = tf.config.list_physical_devices('GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-# Set memory optimization flags
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
 # ============================================================
-# 2. CONFIGURATION (Optimized for 16GB RAM)
+# 2. CONFIGURATION
 # ============================================================
 IMG_HEIGHT = 224
 IMG_WIDTH = 224
-BATCH_SIZE = 12  # Optimized: 8-16 is ideal for 16GB RAM
-TRAIN_DIR = "./Datasets/train" 
+BATCH_SIZE = 8           # ⬇ Giảm từ 12 → 8 để tiết kiệm RAM
+TRAIN_DIR = "./Datasets/train"
 VAL_DIR = "./Datasets/valid"
-NUM_EPOCHS = 15  # Balanced between training quality and time
-LEARNING_RATE = 0.0001
-EARLY_STOP_PATIENCE = 2
 
-# Get number of classes
-NUM_CLASSES = len(os.listdir(TRAIN_DIR))
-print(f"\n[INFO] Detected {NUM_CLASSES} plant disease classes")
+# Phase 1: Train head only (base frozen)
+PHASE1_EPOCHS = 10
+PHASE1_LR = 0.001
+
+# Phase 2: Fine-tune top layers of base model
+PHASE2_EPOCHS = 8
+PHASE2_LR = 0.00001
+FINE_TUNE_FROM_LAYER = 130  # ⬆ Chỉ unfreeze 24 layers cuối (130-154) thay vì 54 layers → tiết kiệm RAM
+
+EARLY_STOP_PATIENCE = 4
+MODEL_DIR = "app/models"
 
 # ============================================================
-# 3. LOAD DATASETS (Memory-efficient approach)
+# 3. LOAD DATASETS
 # ============================================================
-print("\n[STEP 1/5] Loading training dataset...")
+print("\n[STEP 1/6] Loading training dataset...")
 train_ds = tf.keras.utils.image_dataset_from_directory(
     TRAIN_DIR,
     seed=123,
@@ -52,7 +56,7 @@ train_ds = tf.keras.utils.image_dataset_from_directory(
     label_mode='int'
 )
 
-print("[STEP 2/5] Loading validation dataset...")
+print("[STEP 2/6] Loading validation dataset...")
 val_ds = tf.keras.utils.image_dataset_from_directory(
     VAL_DIR,
     seed=123,
@@ -61,87 +65,91 @@ val_ds = tf.keras.utils.image_dataset_from_directory(
     label_mode='int'
 )
 
-# Get class names for later predictions
-class_names = sorted(os.listdir(TRAIN_DIR))
-num_train = len(tf.data.Dataset.from_tensor_slices(
-    tf.io.gfile.glob(os.path.join(TRAIN_DIR, '*', '*'))))
-num_val = len(tf.data.Dataset.from_tensor_slices(
-    tf.io.gfile.glob(os.path.join(VAL_DIR, '*', '*'))))
+# CRITICAL: Lấy class_names trực tiếp từ dataset (đảm bảo khớp label index)
+class_names = train_ds.class_names
+NUM_CLASSES = len(class_names)
+
+num_train = len(tf.io.gfile.glob(os.path.join(TRAIN_DIR, '*', '*')))
+num_val = len(tf.io.gfile.glob(os.path.join(VAL_DIR, '*', '*')))
 
 print(f"  Training images: {num_train}")
 print(f"  Validation images: {num_val}")
-print(f"  Total classes: {len(class_names)}")
+print(f"  Total classes: {NUM_CLASSES}")
 
 # ============================================================
-# 4. OPTIMIZE DATA PIPELINE (Critical for memory efficiency)
+# 4. OPTIMIZE DATA PIPELINE
 # ============================================================
-print("\n[STEP 3/5] Optimizing data pipeline...")
+print("\n[STEP 3/6] Optimizing data pipeline...")
 
-AUTOTUNE = tf.data.AUTOTUNE
-
-# NO CACHE - to save RAM memory
-# Only use prefetch and shuffle efficiently
+# Shuffle buffer nhỏ để tiết kiệm RAM (16GB system)
 train_ds = train_ds.shuffle(
-    buffer_size=min(1000, num_train // BATCH_SIZE),
+    buffer_size=500,
     reshuffle_each_iteration=True
-).prefetch(buffer_size=AUTOTUNE)
+).prefetch(buffer_size=2)  # Cố định prefetch=2 thay vì AUTOTUNE để kiểm soát RAM
 
-val_ds = val_ds.prefetch(buffer_size=AUTOTUNE)
+val_ds = val_ds.prefetch(buffer_size=2)
 
-print("  - Shuffle buffer optimized")
-print("  - Prefetch enabled")
-print("  - Cache disabled (to preserve 16GB RAM)")
+print("  - Shuffle buffer: 500")
+print("  - Prefetch: 2 (fixed, tiết kiệm RAM)")
 
 # ============================================================
-# 5. DATA AUGMENTATION (Prevents overfitting with smaller batches)
+# 5. DATA AUGMENTATION
 # ============================================================
 data_augmentation = tf.keras.Sequential([
     layers.RandomFlip("horizontal_and_vertical"),
     layers.RandomRotation(0.2),
     layers.RandomZoom(0.1),
+    layers.RandomContrast(0.1),
 ])
 
 # ============================================================
 # 6. BUILD MODEL (Transfer Learning - MobileNetV2)
 # ============================================================
-print("\n[STEP 4/5] Building model architecture...")
+print("\n[STEP 4/6] Building model architecture...")
 
-# Load pre-trained MobileNetV2
 base_model = tf.keras.applications.MobileNetV2(
     input_shape=(IMG_HEIGHT, IMG_WIDTH, 3),
     include_top=False,
     weights='imagenet'
 )
 
-# Freeze base model to preserve ImageNet knowledge
+# Phase 1: Freeze toàn bộ base model
 base_model.trainable = False
 
-# Build complete model
 model = models.Sequential([
     layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
     data_augmentation,
-    layers.Rescaling(1./127.5, offset=-1),  # MobileNetV2 normalization
+    layers.Rescaling(1./127.5, offset=-1),  # Chuẩn hóa MobileNetV2: [0,255] → [-1,1]
     base_model,
-    layers.GlobalAveragePooling2D(),  # More efficient than Flatten
-    layers.Dropout(0.3),  # Slightly increased dropout for memory efficiency
-    layers.Dense(128, activation='relu'),
+    layers.GlobalAveragePooling2D(),
+    layers.Dropout(0.3),
+    layers.Dense(128, activation='relu'),  # 128 thay vì 256 → tiết kiệm RAM
+    layers.Dropout(0.2),
     layers.Dense(NUM_CLASSES, activation='softmax')
 ])
 
-# Compile model
 model.compile(
-    optimizer=optimizers.Adam(learning_rate=LEARNING_RATE),
+    optimizer=optimizers.Adam(learning_rate=PHASE1_LR),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
 
-print(f"  - Base model: MobileNetV2")
-print(f"  - Trainable layers: {len(model.trainable_weights)}")
-print(f"  - Total parameters: {model.count_params():,}")
+print(f"  - Base model: MobileNetV2 (frozen, {len(base_model.layers)} layers)")
+print(f"  - Trainable params: {sum(tf.keras.backend.count_params(w) for w in model.trainable_weights):,}")
+print(f"  - Total params: {model.count_params():,}")
 
 # ============================================================
-# 7. CALLBACKS (For training control and memory management)
+# 7. CALLBACKS
 # ============================================================
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+checkpoint = callbacks.ModelCheckpoint(
+    filepath=os.path.join(MODEL_DIR, "best_model.keras"),
+    monitor='val_accuracy',
+    save_best_only=True,
+    verbose=1
+)
+
 early_stop = callbacks.EarlyStopping(
     monitor='val_loss',
     patience=EARLY_STOP_PATIENCE,
@@ -149,76 +157,127 @@ early_stop = callbacks.EarlyStopping(
     restore_best_weights=True
 )
 
-# Reduce learning rate if validation loss plateaus
 reduce_lr = callbacks.ReduceLROnPlateau(
     monitor='val_loss',
     factor=0.5,
-    patience=1,
+    patience=2,
     verbose=1,
     min_lr=1e-7
 )
 
+callback_list = [checkpoint, early_stop, reduce_lr]
+
 # ============================================================
-# 8. TRAIN MODEL
+# 8. PHASE 1: TRAIN HEAD (base model frozen)
 # ============================================================
 print("\n" + "=" * 70)
-print("STARTING TRAINING")
-print(f"  - Epochs: {NUM_EPOCHS}")
+print("PHASE 1: TRAINING HEAD (base frozen)")
+print(f"  - Epochs: {PHASE1_EPOCHS}")
 print(f"  - Batch size: {BATCH_SIZE}")
-print(f"  - Learning rate: {LEARNING_RATE}")
-print(f"  - Early stopping patience: {EARLY_STOP_PATIENCE}")
+print(f"  - Learning rate: {PHASE1_LR}")
 print("=" * 70 + "\n")
 
-history = model.fit(
+history1 = model.fit(
     train_ds,
     validation_data=val_ds,
-    epochs=NUM_EPOCHS,
-    callbacks=[early_stop, reduce_lr],
+    epochs=PHASE1_EPOCHS,
+    callbacks=callback_list,
     verbose=1
 )
 
 # ============================================================
-# 9. SAVE MODEL AND RESULTS
+# 9. PHASE 2: FINE-TUNE TOP LAYERS OF BASE MODEL
+# ============================================================
+print("\n" + "=" * 70)
+print("PHASE 2: FINE-TUNING (unfreeze top layers)")
+print(f"  - Unfreeze from layer {FINE_TUNE_FROM_LAYER}/{len(base_model.layers)}")
+print(f"  - Additional epochs: {PHASE2_EPOCHS}")
+print(f"  - Learning rate: {PHASE2_LR} (10x lower)")
+print("=" * 70 + "\n")
+
+# Giải phóng RAM trước khi vào Phase 2
+gc.collect()
+print("  - Garbage collected before fine-tuning")
+
+# Unfreeze top layers of base model
+base_model.trainable = True
+for layer in base_model.layers[:FINE_TUNE_FROM_LAYER]:
+    layer.trainable = False
+
+# Recompile với learning rate thấp hơn để không phá weights đã train
+model.compile(
+    optimizer=optimizers.Adam(learning_rate=PHASE2_LR),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+total_epochs = PHASE1_EPOCHS + PHASE2_EPOCHS
+initial_epoch = len(history1.history['loss'])
+
+print(f"  - Trainable params (after unfreeze): {sum(tf.keras.backend.count_params(w) for w in model.trainable_weights):,}")
+
+history2 = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=total_epochs,
+    initial_epoch=initial_epoch,
+    callbacks=callback_list,
+    verbose=1
+)
+
+# ============================================================
+# 10. SAVE MODEL AND RESULTS
 # ============================================================
 print("\n" + "=" * 70)
 print("SAVING MODEL...")
 print("=" * 70)
 
-# Create models directory
-if not os.path.exists('PlantAI/models'):
-    os.makedirs('PlantAI/models')
-
-# Save class names mapping
+# Lưu class names mapping (lấy từ dataset, đảm bảo đúng thứ tự)
 class_mapping = {i: name for i, name in enumerate(class_names)}
-with open('PlantAI/models/class_names.json', 'w') as f:
-    json.dump(class_mapping, f, indent=4)
+with open(os.path.join(MODEL_DIR, 'class_names.json'), 'w', encoding='utf-8') as f:
+    json.dump(class_mapping, f, indent=4, ensure_ascii=False)
 
-# Save model
-model.save('PlantAI/models/plant_disease_model.h5')
+# Lưu model format .keras (khuyến nghị TF 2.x) + backup .h5 cho compatibility
+model.save(os.path.join(MODEL_DIR, 'plant_disease_model.keras'))
+model.save(os.path.join(MODEL_DIR, 'plant_disease_model.h5'))
+
+print(f"  ✅ Model saved: {MODEL_DIR}/plant_disease_model.keras")
+print(f"  ✅ Model saved: {MODEL_DIR}/plant_disease_model.h5 (backup)")
+print(f"  ✅ Classes saved: {MODEL_DIR}/class_names.json")
+print(f"  ✅ Best checkpoint: {MODEL_DIR}/best_model.keras")
 
 # ============================================================
-# 10. TRAINING SUMMARY
+# 11. TRAINING SUMMARY
 # ============================================================
-print("\nTRAINING COMPLETED SUCCESSFULLY!")
-print("\nModel Files:")
-print(f"  - Model: PlantAI/models/plant_disease_model.h5")
-print(f"  - Classes: PlantAI/models/class_names.json")
 
-print("\nTraining Results:")
-final_train_loss = history.history['loss'][-1]
-final_train_acc = history.history['accuracy'][-1]
-final_val_loss = history.history['val_loss'][-1]
-final_val_acc = history.history['val_accuracy'][-1]
+# Gộp history từ 2 phase
+full_history = {}
+for key in history1.history:
+    full_history[key] = history1.history[key] + history2.history[key]
 
-print(f"  - Training Loss: {final_train_loss:.4f}")
-print(f"  - Training Accuracy: {final_train_acc:.4f} ({final_train_acc*100:.2f}%)")
-print(f"  - Validation Loss: {final_val_loss:.4f}")
-print(f"  - Validation Accuracy: {final_val_acc:.4f} ({final_val_acc*100:.2f}%)")
-print(f"  - Total Epochs: {len(history.history['loss'])}")
+print("\n" + "=" * 70)
+print("TRAINING COMPLETED SUCCESSFULLY!")
+print("=" * 70)
+
+print(f"\n  Total Epochs: {len(full_history['loss'])}")
+print(f"    Phase 1 (head only):   {len(history1.history['loss'])} epochs")
+print(f"    Phase 2 (fine-tuned):  {len(history2.history['loss'])} epochs")
+
+print(f"\n  Phase 1 Results:")
+print(f"    Train Acc: {history1.history['accuracy'][-1]*100:.2f}%")
+print(f"    Val Acc:   {history1.history['val_accuracy'][-1]*100:.2f}%")
+
+print(f"\n  Phase 2 (Final) Results:")
+print(f"    Train Loss: {history2.history['loss'][-1]:.4f}")
+print(f"    Train Acc:  {history2.history['accuracy'][-1]*100:.2f}%")
+print(f"    Val Loss:   {history2.history['val_loss'][-1]:.4f}")
+print(f"    Val Acc:    {history2.history['val_accuracy'][-1]*100:.2f}%")
+
+best_val_acc = max(full_history['val_accuracy'])
+print(f"\n  🏆 Best Val Accuracy: {best_val_acc*100:.2f}%")
 
 print("\n" + "=" * 70)
 print("Ready for predictions!")
 print("=" * 70)
 
-# Clean up memory
 gc.collect()

@@ -2,9 +2,10 @@
 Datasets/
 
 # Model files (quá lớn)
-PlantAI/models/plant_disease_model.h5
-PlantAI/models/class_names.json
+app/models/*.h5
+app/models/*.keras
 *.h5
+*.keras
 
 # Python cache
 __pycache__/
