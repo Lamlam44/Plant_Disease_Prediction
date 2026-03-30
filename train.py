@@ -6,8 +6,8 @@ import gc
 
 # ============================================================
 # Plant Disease Prediction Model - Training Script
-# Transfer Learning (MobileNetV2) + Fine-tuning
-# Optimized for 16GB RAM systems
+# Transfer Learning (EfficientNetV2B3) + Fine-tuning
+# Optimized for 16GB RAM + RTX 3050 GPU
 # ============================================================
 
 print("=" * 70)
@@ -15,7 +15,7 @@ print("PLANT DISEASE PREDICTION - MODEL TRAINING")
 print("=" * 70)
 
 # ============================================================
-# 1. MEMORY OPTIMIZATION FOR 16GB RAM
+# 1. MEMORY OPTIMIZATION FOR 16GB RAM + RTX 3050
 # ============================================================
 gpus = tf.config.list_physical_devices('GPU')
 for gpu in gpus:
@@ -26,9 +26,9 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 # ============================================================
 # 2. CONFIGURATION
 # ============================================================
-IMG_HEIGHT = 224
-IMG_WIDTH = 224
-BATCH_SIZE = 8           # ⬇ Giảm từ 12 → 8 để tiết kiệm RAM
+IMG_HEIGHT = 300          # EfficientNetV2B3 default input size
+IMG_WIDTH = 300           # EfficientNetV2B3 default input size
+BATCH_SIZE = 4            # ⬇ Giảm từ 8 → 4 vì 300x300 tốn ~1.8x RAM hơn 224x224
 TRAIN_DIR = "./Datasets/train"
 VAL_DIR = "./Datasets/valid"
 
@@ -39,7 +39,7 @@ PHASE1_LR = 0.001
 # Phase 2: Fine-tune top layers of base model
 PHASE2_EPOCHS = 8
 PHASE2_LR = 0.00001
-FINE_TUNE_FROM_LAYER = 130  # ⬆ Chỉ unfreeze 24 layers cuối (130-154) thay vì 54 layers → tiết kiệm RAM
+FINE_TUNE_PERCENT = 0.20  # Unfreeze 20% layers cuối của base model
 
 EARLY_STOP_PATIENCE = 4
 MODEL_DIR = "app/models"
@@ -103,14 +103,17 @@ data_augmentation = tf.keras.Sequential([
 ])
 
 # ============================================================
-# 6. BUILD MODEL (Transfer Learning - MobileNetV2)
+# 6. BUILD MODEL (Transfer Learning - EfficientNetV2B3)
 # ============================================================
 print("\n[STEP 4/6] Building model architecture...")
 
-base_model = tf.keras.applications.MobileNetV2(
+# EfficientNetV2B3: include_preprocessing=True → model tự rescale [0,255] → [-1,1]
+# KHÔNG cần thêm layer Rescaling thủ công
+base_model = tf.keras.applications.EfficientNetV2B3(
     input_shape=(IMG_HEIGHT, IMG_WIDTH, 3),
     include_top=False,
-    weights='imagenet'
+    weights='imagenet',
+    include_preprocessing=True   # Built-in Rescaling: [0,255] → [-1,1]
 )
 
 # Phase 1: Freeze toàn bộ base model
@@ -119,11 +122,11 @@ base_model.trainable = False
 model = models.Sequential([
     layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
     data_augmentation,
-    layers.Rescaling(1./127.5, offset=-1),  # Chuẩn hóa MobileNetV2: [0,255] → [-1,1]
+    # KHÔNG cần Rescaling — EfficientNetV2B3 đã có sẵn (include_preprocessing=True)
     base_model,
     layers.GlobalAveragePooling2D(),
     layers.Dropout(0.3),
-    layers.Dense(128, activation='relu'),  # 128 thay vì 256 → tiết kiệm RAM
+    layers.Dense(256, activation='relu'),  # 256 neurons — EfficientNetV2B3 trích xuất features phong phú hơn
     layers.Dropout(0.2),
     layers.Dense(NUM_CLASSES, activation='softmax')
 ])
@@ -134,7 +137,9 @@ model.compile(
     metrics=['accuracy']
 )
 
-print(f"  - Base model: MobileNetV2 (frozen, {len(base_model.layers)} layers)")
+print(f"  - Base model: EfficientNetV2B3 (frozen, {len(base_model.layers)} layers)")
+print(f"  - Input size: {IMG_HEIGHT}x{IMG_WIDTH} (EfficientNetV2B3 default)")
+print(f"  - Preprocessing: Built-in Rescaling [0,255] → [-1,1]")
 print(f"  - Trainable params: {sum(tf.keras.backend.count_params(w) for w in model.trainable_weights):,}")
 print(f"  - Total params: {model.count_params():,}")
 
@@ -190,19 +195,21 @@ history1 = model.fit(
 # ============================================================
 print("\n" + "=" * 70)
 print("PHASE 2: FINE-TUNING (unfreeze top layers)")
-print(f"  - Unfreeze from layer {FINE_TUNE_FROM_LAYER}/{len(base_model.layers)}")
-print(f"  - Additional epochs: {PHASE2_EPOCHS}")
-print(f"  - Learning rate: {PHASE2_LR} (10x lower)")
 print("=" * 70 + "\n")
 
 # Giải phóng RAM trước khi vào Phase 2
 gc.collect()
 print("  - Garbage collected before fine-tuning")
 
-# Unfreeze top layers of base model
+# Unfreeze top layers of base model (tính toán động theo % tổng layers)
 base_model.trainable = True
-for layer in base_model.layers[:FINE_TUNE_FROM_LAYER]:
+fine_tune_from = int(len(base_model.layers) * (1 - FINE_TUNE_PERCENT))
+for layer in base_model.layers[:fine_tune_from]:
     layer.trainable = False
+
+print(f"  - Unfreeze from layer {fine_tune_from}/{len(base_model.layers)} ({FINE_TUNE_PERCENT*100:.0f}% cuối)")
+print(f"  - Additional epochs: {PHASE2_EPOCHS}")
+print(f"  - Learning rate: {PHASE2_LR} (10x lower)")
 
 # Recompile với learning rate thấp hơn để không phá weights đã train
 model.compile(

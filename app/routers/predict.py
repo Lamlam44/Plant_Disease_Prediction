@@ -1,5 +1,4 @@
 import time
-import base64
 import asyncio
 from functools import partial
 from fastapi import APIRouter, File, UploadFile, HTTPException
@@ -9,7 +8,6 @@ from ..schemas.prediction import (
     PredictionData,
     BatchPredictionResponse,
     BatchPredictionItem,
-    CameraRequest,
 )
 from ..services import model_service
 from ..config import ALLOWED_EXTENSIONS, MAX_FILE_SIZE, MAX_BATCH_SIZE
@@ -150,46 +148,3 @@ async def predict_batch(
         results=results
     )
 
-
-# ─── Endpoint 3: Chụp ảnh từ camera (base64) ─────────────────────────────────
-@router.post(
-    "/camera",
-    response_model=PredictionResponse,
-    summary="Nhận diện bệnh qua camera (Base64)",
-    description="Gửi ảnh chụp từ camera dưới dạng Base64 để nhận diện bệnh. "
-                "Dùng khi tích hợp với giao diện camera trực tiếp. "
-                "Truy cập /camera-demo để dùng giao diện chụp ảnh."
-)
-async def predict_camera(body: CameraRequest):
-    start_time = time.perf_counter()
-
-    # Remove data URI prefix if present
-    image_data = body.image_base64
-    if "," in image_data:
-        image_data = image_data.split(",", 1)[1]
-
-    try:
-        image_bytes = base64.b64decode(image_data)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Base64 không hợp lệ")
-
-    if len(image_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="Ảnh vượt quá 10MB")
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, partial(model_service.predict_from_bytes, image_bytes))
-
-    if "error" in result:
-        return PredictionResponse(status="error", message=result["error"])
-
-    inference_time = f"{time.perf_counter() - start_time:.4f}s"
-
-    return PredictionResponse(
-        status="success",
-        data=PredictionData(
-            label=result["label"],
-            confidence=f"{result['score']}%",
-            inference_time=inference_time,
-            recommendation=result["advice"]
-        )
-    )

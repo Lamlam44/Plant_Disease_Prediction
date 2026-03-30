@@ -7,7 +7,7 @@ class PredictionData(BaseModel):
     confidence: str = Field(..., description="Độ tin cậy của dự đoán (%)")
     inference_time: str = Field(..., description="Thời gian xử lý AI")
     preprocessing: str = Field(
-        default="Resized to 224x224 (No external scaling, handled by Model)",
+        default="Resized to 300x300 (EfficientNetV2B3 built-in preprocessing)",
         description="Thông tin tiền xử lý ảnh"
     )
     recommendation: str = Field(..., description="Lời khuyên chăm sóc cây trồng")
@@ -41,9 +41,3 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     message: str
 
-
-class CameraRequest(BaseModel):
-    image_base64: str = Field(
-        ...,
-        description="Ảnh chụp từ camera, mã hóa Base64 (không cần prefix data:image/...)"
-    )

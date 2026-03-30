@@ -8,9 +8,9 @@ MODEL_PATH_KERAS = os.path.join(BASE_DIR, "models", "plant_disease_model.keras")
 MODEL_PATH_H5 = os.path.join(BASE_DIR, "models", "plant_disease_model.h5")
 CLASS_NAMES_PATH = os.path.join(BASE_DIR, "models", "class_names.json")
 
-# Image preprocessing
-IMG_HEIGHT = 224
-IMG_WIDTH = 224
+# Image preprocessing — EfficientNetV2B3 default input size
+IMG_HEIGHT = 300
+IMG_WIDTH = 300
 
 # Allowed image extensions
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}

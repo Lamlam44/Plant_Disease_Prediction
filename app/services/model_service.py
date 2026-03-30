@@ -64,9 +64,13 @@ def is_ready() -> bool:
 
 
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
+    """Tiền xử lý ảnh cho EfficientNetV2B3.
+    Model đã có built-in Rescaling (include_preprocessing=True)
+    nên chỉ cần resize và chuyển sang float32 [0, 255].
+    """
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize((IMG_WIDTH, IMG_HEIGHT))
-    img_array = np.array(img)
+    img_array = np.array(img, dtype=np.float32)  # float32 [0, 255] — model tự rescale
     return np.expand_dims(img_array, axis=0)
 
 
