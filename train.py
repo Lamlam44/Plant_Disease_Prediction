@@ -28,7 +28,7 @@ os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 # ============================================================
 IMG_HEIGHT = 300          # EfficientNetV2B3 default input size
 IMG_WIDTH = 300           # EfficientNetV2B3 default input size
-BATCH_SIZE = 4            # ⬇ Giảm từ 8 → 4 vì 300x300 tốn ~1.8x RAM hơn 224x224
+BATCH_SIZE = 64            # ⬇ Giảm từ 8 → 4 vì 300x300 tốn ~1.8x RAM hơn 224x224 / Lưu ý hãy chỉnh về 4 nếu RAM máy yếu
 TRAIN_DIR = "./Datasets/train"
 VAL_DIR = "./Datasets/valid"
 
