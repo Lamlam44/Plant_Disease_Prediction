@@ -13,12 +13,6 @@ class PredictionData(BaseModel):
     recommendation: str = Field(..., description="Lời khuyên chăm sóc cây trồng")
 
 
-class PredictionResponse(BaseModel):
-    status: str = Field(..., description="Trạng thái xử lý: success / error")
-    data: Optional[PredictionData] = None
-    message: Optional[str] = None
-
-
 class BatchPredictionItem(BaseModel):
     filename: str = Field(..., description="Tên file ảnh gốc")
     status: str = Field(..., description="Trạng thái xử lý ảnh này: success / error")

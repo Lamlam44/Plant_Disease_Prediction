@@ -4,7 +4,6 @@ from functools import partial
 from fastapi import APIRouter, File, UploadFile, HTTPException
 
 from ..schemas.prediction import (
-    PredictionResponse,
     PredictionData,
     BatchPredictionResponse,
     BatchPredictionItem,
@@ -22,49 +21,7 @@ def _validate_extension(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
-# ─── Endpoint 1: Tải lên 1 ảnh ───────────────────────────────────────────────
-@router.post(
-    "/single",
-    response_model=PredictionResponse,
-    summary="Nhận diện bệnh cây trồng (1 ảnh)",
-    description="Tải lên một ảnh lá cây (JPG/PNG) để nhận diện bệnh. Phù hợp khi "
-                "người dùng muốn kiểm tra nhanh một mẫu lá cụ thể."
-)
-async def predict_single(
-    file: UploadFile = File(..., description="Ảnh lá cây (JPG/PNG/WEBP, tối đa 10MB)")
-):
-    if not _validate_extension(file.filename):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Định dạng file không hỗ trợ. Chấp nhận: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
-
-    start_time = time.perf_counter()
-    image_bytes = await file.read()
-
-    if len(image_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File vượt quá 10MB")
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, partial(model_service.predict_from_bytes, image_bytes))
-
-    if "error" in result:
-        return PredictionResponse(status="error", message=result["error"])
-
-    inference_time = f"{time.perf_counter() - start_time:.4f}s"
-
-    return PredictionResponse(
-        status="success",
-        data=PredictionData(
-            label=result["label"],
-            confidence=f"{result['score']}%",
-            inference_time=inference_time,
-            recommendation=result["advice"]
-        )
-    )
-
-
-# ─── Endpoint 2: Tải lên nhiều ảnh ───────────────────────────────────────────
+# ─── Endpoint: Tải lên nhiều ảnh ─────────────────────────────────────────────
 @router.post(
     "/batch",
     response_model=BatchPredictionResponse,

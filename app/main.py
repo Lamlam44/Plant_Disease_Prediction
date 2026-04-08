@@ -25,7 +25,6 @@ app = FastAPI(
         "## Hệ thống nhận diện bệnh cây trồng qua ảnh\n\n"
         "Hỗ trợ 38 loại bệnh trên 14 loại cây trồng.\n\n"
         "### Phương thức nhận diện:\n"
-        "- **Upload ảnh (đơn)** — `/predict/single` — kiểm tra nhanh 1 mẫu lá\n"
         "- **Upload ảnh (nhiều)** — `/predict/batch` — nhận diện hàng loạt (tối đa 10 ảnh)"
     ),
     version="2.0.0",

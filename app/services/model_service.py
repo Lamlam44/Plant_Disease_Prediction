@@ -25,11 +25,14 @@ def load_model():
     if _is_ready:
         return
 
-    # Load class names
+    # Load class names — hỗ trợ cả định dạng list [] và dict {}
     if os.path.exists(CLASS_NAMES_PATH):
         with open(CLASS_NAMES_PATH, 'r', encoding='utf-8') as f:
             class_mapping = json.load(f)
-            _class_names = {int(k): v for k, v in class_mapping.items()}
+            if isinstance(class_mapping, list):
+                _class_names = {i: v for i, v in enumerate(class_mapping)}
+            else:
+                _class_names = {int(k): v for k, v in class_mapping.items()}
     else:
         _class_names = {}
 
@@ -53,7 +56,7 @@ def warmup():
     dummy_bytes.seek(0)
 
     try:
-        predict_from_bytes(dummy_bytes.getvalue())
+        predict_batch_from_bytes([dummy_bytes.getvalue()])
         return True
     except Exception:
         return False
@@ -70,7 +73,7 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     """
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize((IMG_WIDTH, IMG_HEIGHT))
-    img_array = np.array(img, dtype=np.float32)  # float32 [0, 255] — model tự rescale
+    img_array = np.array(img, dtype=np.float32)  
     return np.expand_dims(img_array, axis=0)
 
 
@@ -108,19 +111,6 @@ def _format_prediction(predictions_array, index: int) -> dict:
         "score": f"{confidence:.2f}",
         "advice": advice
     }
-
-
-def predict_from_bytes(image_bytes: bytes) -> dict:
-    load_model()
-
-    if _model is None:
-        return {"error": "Không tìm thấy file model: plant_disease_model.h5"}
-    if not _class_names:
-        return {"error": "Không tìm thấy file mapping class_names.json"}
-
-    processed_img = preprocess_image(image_bytes)
-    predictions = _model.predict(processed_img, verbose=0)
-    return _format_prediction(predictions, 0)
 
 
 def predict_batch_from_bytes(images_bytes_list: list[bytes]) -> list[dict]:
