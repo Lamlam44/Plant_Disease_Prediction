@@ -23,6 +23,10 @@ for gpu in gpus:
 
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
+# Tắt layout optimizer: tránh lỗi "Size of values 0 does not match size of permutation 4"
+# xảy ra khi EfficientNetV2 dropout (stateless_dropout/SelectV2) gặp NHWC→NCHW conversion
+tf.config.optimizer.set_experimental_options({'layout_optimizer': False})
+
 # ============================================================
 # 2. CONFIGURATION
 # ============================================================
@@ -77,23 +81,7 @@ print(f"  Validation images: {num_val}")
 print(f"  Total classes: {NUM_CLASSES}")
 
 # ============================================================
-# 4. OPTIMIZE DATA PIPELINE
-# ============================================================
-print("\n[STEP 3/6] Optimizing data pipeline...")
-
-# Shuffle buffer nhỏ để tiết kiệm RAM (16GB system)
-train_ds = train_ds.shuffle(
-    buffer_size=500,
-    reshuffle_each_iteration=True
-).prefetch(buffer_size=2)  # Cố định prefetch=2 thay vì AUTOTUNE để kiểm soát RAM
-
-val_ds = val_ds.prefetch(buffer_size=2)
-
-print("  - Shuffle buffer: 500")
-print("  - Prefetch: 2 (fixed, tiết kiệm RAM)")
-
-# ============================================================
-# 5. DATA AUGMENTATION
+# 4. DATA AUGMENTATION
 # ============================================================
 data_augmentation = tf.keras.Sequential([
     layers.RandomFlip("horizontal_and_vertical"),
@@ -101,6 +89,29 @@ data_augmentation = tf.keras.Sequential([
     layers.RandomZoom(0.1),
     layers.RandomContrast(0.1),
 ])
+
+# ============================================================
+# 5. OPTIMIZE DATA PIPELINE
+# ============================================================
+print("\n[STEP 3/6] Optimizing data pipeline...")
+
+# Áp dụng augmentation qua map() thay vì đặt trong model
+# → tránh lỗi layout optimizer với EfficientNetV2 dropout layers
+@tf.function
+def augment_train(image, label):
+    return data_augmentation(image, training=True), label
+
+# Shuffle buffer 100 batches: 100×16×300×300×3×4 ≈ 1.7GB (an toàn cho Colab T4)
+# (500 batches cũ ≈ 8.6 GB → gây lỗi "could not allocate pinned host memory")
+train_ds = train_ds.map(augment_train, num_parallel_calls=tf.data.AUTOTUNE) \
+                   .shuffle(buffer_size=100, reshuffle_each_iteration=True) \
+                   .prefetch(buffer_size=tf.data.AUTOTUNE)
+
+val_ds = val_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+
+print("  - Augmentation: applied via map() in data pipeline")
+print("  - Shuffle buffer: 100 batches (giảm từ 500, tránh OOM pinned memory)")
+print("  - Prefetch: AUTOTUNE")
 
 # ============================================================
 # 6. BUILD MODEL (Transfer Learning - EfficientNetV2B3)
@@ -121,7 +132,8 @@ base_model.trainable = False
 
 model = models.Sequential([
     layers.Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
-    data_augmentation,
+    # Augmentation đã chuyển sang data pipeline (map()), không đặt trong model
+    # → tránh layout optimizer crash với EfficientNetV2B3 stateless_dropout
     # KHÔNG cần Rescaling — EfficientNetV2B3 đã có sẵn (include_preprocessing=True)
     base_model,
     layers.GlobalAveragePooling2D(),
