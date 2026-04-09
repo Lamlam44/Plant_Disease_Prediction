@@ -69,9 +69,8 @@ async def predict_batch(
         valid_indices.append(i)
         valid_bytes.append(image_bytes)
 
-    # Phase 2: Batch predict all valid images in one model call
     if valid_bytes:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         batch_results = await loop.run_in_executor(
             None, partial(model_service.predict_batch_from_bytes, valid_bytes)
         )
