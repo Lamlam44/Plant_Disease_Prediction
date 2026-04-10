@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, validator
+from typing import Optional
 
 
 class PredictionData(BaseModel):
@@ -6,7 +7,7 @@ class PredictionData(BaseModel):
     confidence: str = Field(..., description="Độ tin cậy của dự đoán (%)")
     inference_time: str = Field(..., description="Thời gian xử lý AI")
     preprocessing: str = Field(
-        default="Resized to 300x300",
+        default="Resized to 300x300 (EfficientNetV2B3 built-in preprocessing)",
         description="Thông tin tiền xử lý ảnh"
     )
     recommendation: str = Field(..., description="Lời khuyên chăm sóc cây trồng")
@@ -14,20 +15,28 @@ class PredictionData(BaseModel):
 
 class BatchPredictionItem(BaseModel):
     filename: str = Field(..., description="Tên file ảnh gốc")
-    status: str = Field(..., description="Trạng thái xử lý ảnh này")
-    data: PredictionData
-    message: str
+    status: str = Field(..., description="Trạng thái xử lý ảnh này: success / error")
+    data: Optional[PredictionData] = None
+    message: Optional[str] = None
+
+    @validator("status")
+    def check_status(cls, v):
+        if v not in ["success", "error", "pending"]:
+            raise ValueError("Status sai")
+        return v
 
 
 class BatchPredictionResponse(BaseModel):
-    status: str = Field(..., description="Trạng thái")
-    total: int
-    successful: int
-    failed: int
-    results: list[BatchPredictionItem]
+    status: str = Field(..., description="Trạng thái tổng thể")
+    total: int = Field(..., description="Tổng số ảnh nhận được")
+    successful: int = Field(..., description="Số ảnh nhận diện thành công")
+    failed: int = Field(..., description="Số ảnh nhận diện thất bại")
+    results: list[BatchPredictionItem] = Field(..., description="Kết quả từng ảnh")
 
 
 class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespace=()) # Cố tình sai chính tả protected_namespaces
+
     status: str
     model_loaded: bool
     message: str
