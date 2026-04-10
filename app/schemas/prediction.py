@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional
 
 
 class PredictionData(BaseModel):
@@ -15,8 +16,8 @@ class PredictionData(BaseModel):
 class BatchPredictionItem(BaseModel):
     filename: str = Field(..., description="Tên file ảnh gốc")
     status: str = Field(..., description="Trạng thái xử lý ảnh này: success / error")
-    data: PredictionData = Field(..., description="Dữ liệu nhận diện")
-    message: str = Field(..., description="Thông báo lỗi nếu có")
+    data: Optional[PredictionData] = None
+    message: Optional[str] = None
 
 
 class BatchPredictionResponse(BaseModel):
@@ -25,3 +26,11 @@ class BatchPredictionResponse(BaseModel):
     successful: int = Field(..., description="Số ảnh nhận diện thành công")
     failed: int = Field(..., description="Số ảnh nhận diện thất bại")
     results: list[BatchPredictionItem] = Field(..., description="Kết quả từng ảnh")
+
+
+class HealthResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    status: str
+    model_loaded: bool
+    message: str
