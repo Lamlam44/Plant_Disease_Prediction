@@ -1,16 +1,19 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
+from datetime import datetime
 
 
 class PredictionData(BaseModel):
     label: str = Field(..., description="Tên bệnh / trạng thái cây trồng")
     confidence: str = Field(..., description="Độ tin cậy của dự đoán (%)")
+    raw_scores: list[float] = Field(default_factory=list, description="Danh sách điểm thô")
     inference_time: str = Field(..., description="Thời gian xử lý AI")
     preprocessing: str = Field(
         default="Resized to 300x300 (EfficientNetV2B3 built-in preprocessing)",
         description="Thông tin tiền xử lý ảnh"
     )
     recommendation: str = Field(..., description="Lời khuyên chăm sóc cây trồng")
+    processed_at: datetime = Field(default_factory=datetime.now, description="Thời gian xử lý")
 
 
 class BatchPredictionItem(BaseModel):
