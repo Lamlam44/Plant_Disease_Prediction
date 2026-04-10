@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, validator
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 
 
@@ -19,12 +19,6 @@ class BatchPredictionItem(BaseModel):
     data: Optional[PredictionData] = None
     message: Optional[str] = None
 
-    @validator("status")
-    def check_status(cls, v):
-        if v not in ["success", "error", "pending"]:
-            raise ValueError("Status sai")
-        return v
-
 
 class BatchPredictionResponse(BaseModel):
     status: str = Field(..., description="Trạng thái tổng thể")
@@ -35,7 +29,7 @@ class BatchPredictionResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    model_config = ConfigDict(protected_namespace=()) # Cố tình sai chính tả protected_namespaces
+    model_config = ConfigDict(protected_namespaces=())
 
     status: str
     model_loaded: bool
