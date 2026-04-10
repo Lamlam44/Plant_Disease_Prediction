@@ -1,12 +1,12 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Dict
+from typing import Optional
 from datetime import datetime
 
 
 class PredictionData(BaseModel):
     label: str = Field(..., description="Tên bệnh / trạng thái cây trồng")
-    confidence: float = Field(..., description="Độ tin cậy của dự đoán (%)")
-    raw_scores: list[float] = Field(default=[], description="Danh sách điểm thô")
+    confidence: str = Field(..., description="Độ tin cậy của dự đoán (%)")
+    raw_scores: list[float] = Field(default_factory=list, description="Danh sách điểm thô")
     inference_time: str = Field(..., description="Thời gian xử lý AI")
     preprocessing: str = Field(
         default="Resized to 300x300 (EfficientNetV2B3 built-in preprocessing)",
@@ -28,7 +28,7 @@ class BatchPredictionResponse(BaseModel):
     total: int = Field(..., description="Tổng số ảnh nhận được")
     successful: int = Field(..., description="Số ảnh nhận diện thành công")
     failed: int = Field(..., description="Số ảnh nhận diện thất bại")
-    results: Dict[str, BatchPredictionItem] = Field(..., description="Kết quả từng ảnh dạng Dictionary")
+    results: list[BatchPredictionItem] = Field(..., description="Kết quả từng ảnh")
 
 
 class HealthResponse(BaseModel):
