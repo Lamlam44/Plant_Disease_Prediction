@@ -1,19 +1,22 @@
 from pathlib import Path
 
-# Base directory using Pathlib for modern path handling
-BASE_DIR = Path(__file__).resolve().parent
+class AppConfig:
+    # Path settings
+    BASE_DIR = Path(__file__).resolve().parent
+    MODELS_DIR = BASE_DIR / "models"
+    
+    # Model Asset Paths
+    MODEL_KERAS = MODELS_DIR / "plant_disease_model.keras"
+    MODEL_H5 = MODELS_DIR / "plant_disease_model.h5"
+    CLASS_MAPPING = MODELS_DIR / "class_names.json"
 
-# Model files configuration
-MODELS_DIR = BASE_DIR / "models"
-MODEL_PATH_KERAS = MODELS_DIR / "plant_disease_model.keras"
-MODEL_PATH_H5 = MODELS_DIR / "plant_disease_model.h5"
-CLASS_NAMES_PATH = MODELS_DIR / "class_names.json"
+    # Model Input Dimensions (EfficientNetV2B3)
+    INPUT_SHAPE = (300, 300) 
+    
+    # API Validation Rules
+    EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    FILE_LIMIT = 10 * 1024 * 1024  # 10MB
+    BATCH_LIMIT = 10
 
-# Image settings
-IMG_HEIGHT = 300
-IMG_WIDTH = 300
-
-# Security & Constraints
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_BATCH_SIZE = 10
+# Export instances for easy import in other modules
+config = AppConfig()
