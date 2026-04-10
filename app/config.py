@@ -1,22 +1,22 @@
-from pathlib import Path
+import os
 
-class AppConfig:
-    # Path settings
-    BASE_DIR = Path(__file__).resolve().parent
-    MODELS_DIR = BASE_DIR / "models"
-    
-    # Model Asset Paths
-    MODEL_KERAS = MODELS_DIR / "plant_disease_model.keras"
-    MODEL_H5 = MODELS_DIR / "plant_disease_model.h5"
-    CLASS_MAPPING = MODELS_DIR / "class_names.json"
+# Base directory of the app package
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # Model Input Dimensions (EfficientNetV2B3)
-    INPUT_SHAPE = (300, 300) 
-    
-    # API Validation Rules
-    EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-    FILE_LIMIT = 10 * 1024 * 1024  # 10MB
-    BATCH_LIMIT = 10
+# Model files — prefer .keras format, fallback to .h5
+MODEL_PATH_KERAS = os.path.join(BASE_DIR, "models", "plant_disease_model.keras")
+MODEL_PATH_H5 = os.path.join(BASE_DIR, "models", "plant_disease_model.h5")
+CLASS_NAMES_PATH = os.path.join(BASE_DIR, "models", "class_names.json")
 
-# Export instances for easy import in other modules
-config = AppConfig()
+# Image preprocessing — EfficientNetV2B3 default input size
+IMG_HEIGHT = 300
+IMG_WIDTH = 300
+
+# Allowed image extensions
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+# Max file size (10MB)
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+# Max batch size for multi-file upload
+MAX_BATCH_SIZE = 10
